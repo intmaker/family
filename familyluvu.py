@@ -49,7 +49,12 @@ def load_data():
     try:
         nocache_url = f"{sheet_url}&timestamp={int(datetime.now().timestamp())}"
         df = pd.read_csv(nocache_url)
-        df = df.fillna("") # nan 결측치 누락 방지 방어 패치
+        df = df.fillna("") 
+        
+        # [핵심 보완 ⭐] 구글 시트의 status 열이 '완료'인 행은 대시보드 조회에서 제외 (진행중인 것만 필터링)
+        if "status" in df.columns:
+            df = df[df["status"] != "완료"]
+            
         return df.to_dict(orient="records")
     except:
         return []
@@ -59,7 +64,7 @@ if "current_missions" not in st.session_state:
     st.session_state.current_missions = load_data()
 
 st.title("👨‍👩‍👧‍👦 FamilySync - 워킹맘을 위한 스마트 가족 대시보드")
-st.caption("🌐 구글 스프레드시트 양방향 연동 완료 | '일정 종류' 항목을 없애 더욱 직관적이고 간결해진 알림장입니다.")
+st.caption("🌐 클라우드 동기화 완료 | 완료 처리 시 구글 시트 원본 상태가 실시간 업데이트되어 다시 조회해도 완벽히 삭제(제외)됩니다.")
 
 col1, col2 = st.columns([1, 1.2])
 
@@ -67,16 +72,9 @@ col1, col2 = st.columns([1, 1.2])
 with col1:
     st.subheader("Create New Family Mission")
     with st.form("mission_form", clear_on_submit=True):
-        # 할 일 입력창
         task_text = st.text_input("할 일 (일정)", placeholder="예: 효주 음악학원 픽업, 현준이 약 먹이기")
-        
-        # 담당자 선택
         worker = st.radio("담당자 (Assignee)", ["엄마", "아빠", "아이"], horizontal=True)
-        
-        # 대상 자녀 선택 (기존 일정 종류 콤보박스는 삭제 처리 ✂)
         chosen_child = st.selectbox("대상 자녀", ["효주", "현준", "공통"])
-            
-        # 우선순위 및 마감 기한 설정
         chosen_tag = st.radio("우선순위 / 긴급도 설정", ["Normal 📅", "Priority 📌", "Urgent 🚨"], horizontal=True)
         due_date = st.date_input("마감 일자 (Due Date)", datetime.now())
         
@@ -86,7 +84,6 @@ with col1:
             if not task_text:
                 st.error("할 일을 입력해 주세요!")
             else:
-                # 전송 데이터 구조 조립 (type 제외)
                 payload = {
                     "worker": worker, 
                     "child": chosen_child, 
@@ -95,7 +92,6 @@ with col1:
                     "due": str(due_date)
                 }
                 
-                # 구글 앱스 스크립트로 데이터 POST 전송
                 try:
                     response = requests.post(script_url, json=payload)
                     if response.status_code == 200:
@@ -103,7 +99,7 @@ with col1:
                         st.session_state.current_missions = load_data()
                         st.rerun()
                     else:
-                        st.error("구글 서버 통신에 실패했습니다. (배포 권한 설정을 확인해 주세요)")
+                        st.error("구글 서버 통신에 실패했습니다.")
                 except Exception as e:
                     st.error(f"전송 실패 오류: {e}")
 
@@ -122,33 +118,44 @@ with col2:
     else:
         for idx, item in enumerate(display_missions):
             current_worker = item.get("worker", "엄마")
-            if not current_worker or current_worker == "nan":
-                current_worker = "엄마"
+            if not current_worker or current_worker == "nan": current_worker = "엄마"
                 
             theme = theme_colors.get(current_worker, theme_colors["엄마"])
             
             current_tag = item.get("tag", "Normal 📅")
-            if not current_tag or current_tag == "nan":
-                current_tag = "Normal 📅"
+            if not current_tag or current_tag == "nan": current_tag = "Normal 📅"
                 
             tag_color = tag_styles.get(current_tag, "#7F8C8D")
             border_color = "#E84118" if current_tag == "Urgent 🚨" else theme['fg']
             
-            task_display = item.get('task', '')
-            if task_display == "nan":
-                task_display = "내용 없음"
-                
-            # 카드 인터페이스 상에서도 분류 명칭 레이아웃 제거 반영 ✂
+            task_display = item.get('task', '내용 없음')
+            due_display = item.get('due', str(datetime.now().date()))
+            
             card_html = f"""
             <div class="family-card" style="background-color: {theme['bg']}; border-left: 6px solid {border_color};">
                 <span class="badge" style="background-color: {tag_color};">{current_tag}</span>
                 <h4 style="color: #2C3E50; margin: 0;">{theme['emoji']} [{current_worker}] 대상: {item.get('child', '공통')}</h4>
                 <p style="color: #485460; margin: 8px 0 2px 0; font-size: 1.1rem; font-weight: bold;">{task_display}</p>
-                <div class="due-date">📅 마감기한: <b>{item.get('due', str(datetime.now().date()))}</b></div>
+                <div class="due-date">📅 마감기한: <b>{due_display}</b></div>
             </div>
             """
             st.markdown(card_html, unsafe_allow_html=True)
             
-            if st.button(f"✔ {idx+1}번 미션 완료 처리 (화면에서 숨기기)", key=f"comp_{idx}"):
-                del st.session_state.current_missions[idx]
-                st.rerun()
+            # [수정 패치 ⭐] 완료 처리 버튼 클릭 시 구글 시트에 완료 상태를 쏘아 보내 영구 제외시킴
+            if st.button(f"✔ {idx+1}번 미션 완료 처리", key=f"comp_{idx}"):
+                complete_payload = {
+                    "action": "complete",
+                    "worker": current_worker,
+                    "child": item.get('child', '공통'),
+                    "task": task_display
+                }
+                try:
+                    res = requests.post(script_url, json=complete_payload)
+                    if res.status_code == 200:
+                        st.toast("구글 시트에 완료 상태가 동기화되었습니다!")
+                        st.session_state.current_missions = load_data()
+                        st.rerun()
+                    else:
+                        st.error("구글 시트 상태 업데이트 실패")
+                except Exception as e:
+                    st.error(f"완료 처리 중 통신 오류: {e}")
