@@ -39,21 +39,17 @@ theme_colors = {
 tag_styles = {"Urgent 🚨": "#D63031", "Priority 📌": "#E67E22", "Normal 📅": "#7F8C8D"}
 
 # -------------------------------------------------------------
-# 🔗 [양방향 클라우드 주소 연동 완료]
+# 🔗 [양방향 클라우드 주소 연동]
 # -------------------------------------------------------------
-# 1. 구글 스프레드시트 데이터 읽기용 CSV 주소
 sheet_url = "https://docs.google.com/spreadsheets/d/1vSXiuoYiQM4dxlKGkXbNJRKKWW0ADAJ3ESsxtA-4Hpg/gviz/tq?tqx=out:csv"
-
-# 2. 구글 스프레드시트 데이터 쓰기용 Apps Script 주소 (보내주신 주소 반영 완료 ✨)
 script_url = "https://script.google.com/macros/s/AKfycbxs9THg2TXUppuibUNXLaUV-gPQF0__qlwObXDO0qlN7ebGBvYV9RHH5omnF3zVfTMK/exec"
-
 
 def load_data():
     """구글 시트에서 데이터를 실시간으로 읽어오는 함수"""
     try:
-        # 데이터 캐싱 방지를 위한 타임스탬프 결합
         nocache_url = f"{sheet_url}&timestamp={int(datetime.now().timestamp())}"
         df = pd.read_csv(nocache_url)
+        df = df.fillna("") # nan 결측치 누락 방지 방어 패치
         return df.to_dict(orient="records")
     except:
         return []
@@ -63,7 +59,7 @@ if "current_missions" not in st.session_state:
     st.session_state.current_missions = load_data()
 
 st.title("👨‍👩‍👧‍👦 FamilySync - 워킹맘을 위한 스마트 가족 대시보드")
-st.caption("🌐 구글 스프레드시트 양방향 연동 성공! 웹에서 등록하면 실시간으로 구글 엑셀 시트에 영구 저장됩니다.")
+st.caption("🌐 구글 스프레드시트 양방향 연동 완료 | '일정 종류' 항목을 없애 더욱 직관적이고 간결해진 알림장입니다.")
 
 col1, col2 = st.columns([1, 1.2])
 
@@ -71,13 +67,16 @@ col1, col2 = st.columns([1, 1.2])
 with col1:
     st.subheader("Create New Family Mission")
     with st.form("mission_form", clear_on_submit=True):
+        # 할 일 입력창
         task_text = st.text_input("할 일 (일정)", placeholder="예: 효주 음악학원 픽업, 현준이 약 먹이기")
+        
+        # 담당자 선택
         worker = st.radio("담당자 (Assignee)", ["엄마", "아빠", "아이"], horizontal=True)
         
-        c_col, t_col = st.columns(2)
-        with c_col: chosen_child = st.selectbox("대상 자녀", ["효주", "현준", "공통"])
-        with t_col: chosen_type = st.selectbox("일정 종류", ["학원", "병원", "집안일", "마트", "기타"])
+        # 대상 자녀 선택 (기존 일정 종류 콤보박스는 삭제 처리 ✂)
+        chosen_child = st.selectbox("대상 자녀", ["효주", "현준", "공통"])
             
+        # 우선순위 및 마감 기한 설정
         chosen_tag = st.radio("우선순위 / 긴급도 설정", ["Normal 📅", "Priority 📌", "Urgent 🚨"], horizontal=True)
         due_date = st.date_input("마감 일자 (Due Date)", datetime.now())
         
@@ -87,10 +86,13 @@ with col1:
             if not task_text:
                 st.error("할 일을 입력해 주세요!")
             else:
-                # 전송 데이터 생성
+                # 전송 데이터 구조 조립 (type 제외)
                 payload = {
-                    "worker": worker, "child": chosen_child, "type": chosen_type,
-                    "task": task_text, "tag": chosen_tag, "due": str(due_date)
+                    "worker": worker, 
+                    "child": chosen_child, 
+                    "task": task_text, 
+                    "tag": chosen_tag, 
+                    "due": str(due_date)
                 }
                 
                 # 구글 앱스 스크립트로 데이터 POST 전송
@@ -98,7 +100,6 @@ with col1:
                     response = requests.post(script_url, json=payload)
                     if response.status_code == 200:
                         st.success("🎯 구글 스프레드시트에 영구 저장되었습니다!")
-                        # 전송 완료 후 대시보드 강제 동기화 및 갱신
                         st.session_state.current_missions = load_data()
                         st.rerun()
                     else:
@@ -121,22 +122,33 @@ with col2:
     else:
         for idx, item in enumerate(display_missions):
             current_worker = item.get("worker", "엄마")
+            if not current_worker or current_worker == "nan":
+                current_worker = "엄마"
+                
             theme = theme_colors.get(current_worker, theme_colors["엄마"])
+            
             current_tag = item.get("tag", "Normal 📅")
+            if not current_tag or current_tag == "nan":
+                current_tag = "Normal 📅"
+                
             tag_color = tag_styles.get(current_tag, "#7F8C8D")
             border_color = "#E84118" if current_tag == "Urgent 🚨" else theme['fg']
             
+            task_display = item.get('task', '')
+            if task_display == "nan":
+                task_display = "내용 없음"
+                
+            # 카드 인터페이스 상에서도 분류 명칭 레이아웃 제거 반영 ✂
             card_html = f"""
             <div class="family-card" style="background-color: {theme['bg']}; border-left: 6px solid {border_color};">
                 <span class="badge" style="background-color: {tag_color};">{current_tag}</span>
-                <h4 style="color: #2C3E50; margin: 0;">{theme['emoji']} [{current_worker}] 대상: {item.get('child', '공통')} | 분류: {item.get('type', '일반')}</h4>
-                <p style="color: #485460; margin: 6px 0 2px 0; font-size: 1.1rem; font-weight: bold;">{item.get('task', '내용 없음')}</p>
+                <h4 style="color: #2C3E50; margin: 0;">{theme['emoji']} [{current_worker}] 대상: {item.get('child', '공통')}</h4>
+                <p style="color: #485460; margin: 8px 0 2px 0; font-size: 1.1rem; font-weight: bold;">{task_display}</p>
                 <div class="due-date">📅 마감기한: <b>{item.get('due', str(datetime.now().date()))}</b></div>
             </div>
             """
             st.markdown(card_html, unsafe_allow_html=True)
             
-            # 대시보드 화면 임시 숨김 버튼
             if st.button(f"✔ {idx+1}번 미션 완료 처리 (화면에서 숨기기)", key=f"comp_{idx}"):
                 del st.session_state.current_missions[idx]
                 st.rerun()
