@@ -66,18 +66,18 @@ def load_data():
 if "current_missions" not in st.session_state:
     st.session_state.current_missions = load_data()
 
-st.title("👨‍👩‍👧‍👦 FamilySync - 워킹맘을 위한 스마트 가족 대시보드")
-st.caption("🌐 클라우드 완벽 연동 | 완료 처리 시 구글 시트 원본의 status 데이터가 '완료'로 즉시 업데이트됩니다.")
+st.title("👨‍👩‍👧‍👦 맞벌이 부부를 위한 스마트 가족 대시보드")
+st.caption("made by Siah Kim for my family")
 
 col1, col2 = st.columns([1, 1.2])
 
 # --- [왼쪽 영역: 새로운 미션 작성 및 구글 전송 폼] ---
 with col1:
-    st.subheader("Create New Family Mission")
+    st.subheader("가족 미션을 새로 생성하세요.")
     with st.form("mission_form", clear_on_submit=True):
-        task_text = st.text_input("할 일 (일정)", placeholder="예: 효주 음악학원 픽업, 현준이 약 먹이기")
+        task_text = st.text_input("할 일 (일정)", placeholder="할일 입력")
         worker = st.radio("담당자 (Assignee)", ["엄마", "아빠", "아이"], horizontal=True)
-        chosen_child = st.selectbox("대상 자녀", ["효주", "현준", "공통"])
+        chosen_child = st.selectbox("대상", ["효주", "현준", "공통", "기타"])
         chosen_tag = st.radio("우선순위 / 긴급도 설정", ["Normal 📅", "Priority 📌", "Urgent 🚨"], horizontal=True)
         due_date = st.date_input("마감 일자 (Due Date)", datetime.now())
         
@@ -108,7 +108,7 @@ with col1:
 
 # --- [오른쪽 영역: 클라우드 동기화 대시보드] ---
 with col2:
-    st.subheader("Today's Family Missions")
+    st.subheader("오늘의 가족 미션!!")
     
     if st.button("🔄 구글 스프레드시트 데이터 실시간 동기화", use_container_width=True):
         st.session_state.current_missions = load_data()
