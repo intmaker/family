@@ -42,6 +42,8 @@ tag_styles = {"Urgent 🚨": "#D63031", "Priority 📌": "#E67E22", "Normal 📅
 # 🔗 [양방향 클라우드 주소 연동]
 # -------------------------------------------------------------
 sheet_url = "https://docs.google.com/spreadsheets/d/1vSXiuoYiQM4dxlKGkXbNJRKKWW0ADAJ3ESsxtA-4Hpg/gviz/tq?tqx=out:csv"
+
+# ⭐ 만약 1단계 배포 후 주소가 바뀌었다면 아래 코드를 새 주소로 변경해 주세요!
 script_url = "https://script.google.com/macros/s/AKfycbxs9THg2TXUppuibUNXLaUV-gPQF0__qlwObXDO0qlN7ebGBvYV9RHH5omnF3zVfTMK/exec"
 
 def load_data():
@@ -51,7 +53,7 @@ def load_data():
         df = pd.read_csv(nocache_url)
         df = df.fillna("") 
         
-        # [핵심 보완 ⭐] 구글 시트의 status 열이 '완료'인 행은 대시보드 조회에서 제외 (진행중인 것만 필터링)
+        # 구글 시트의 status 열이 '완료'인 행은 대시보드 조회에서 완벽 제외
         if "status" in df.columns:
             df = df[df["status"] != "완료"]
             
@@ -64,7 +66,7 @@ if "current_missions" not in st.session_state:
     st.session_state.current_missions = load_data()
 
 st.title("👨‍👩‍👧‍👦 FamilySync - 워킹맘을 위한 스마트 가족 대시보드")
-st.caption("🌐 클라우드 동기화 완료 | 완료 처리 시 구글 시트 원본 상태가 실시간 업데이트되어 다시 조회해도 완벽히 삭제(제외)됩니다.")
+st.caption("🌐 클라우드 동기화 완료 | 완료 처리 시 구글 시트 원본의 status가 '완료'로 즉시 업데이트됩니다.")
 
 col1, col2 = st.columns([1, 1.2])
 
@@ -141,7 +143,7 @@ with col2:
             """
             st.markdown(card_html, unsafe_allow_html=True)
             
-            # [수정 패치 ⭐] 완료 처리 버튼 클릭 시 구글 시트에 완료 상태를 쏘아 보내 영구 제외시킴
+            # [동기화 연동 수정 완료 🎯] 완료 누르면 구글 시트의 6번째(F열) status를 '완료'로 변경 요청
             if st.button(f"✔ {idx+1}번 미션 완료 처리", key=f"comp_{idx}"):
                 complete_payload = {
                     "action": "complete",
@@ -152,7 +154,7 @@ with col2:
                 try:
                     res = requests.post(script_url, json=complete_payload)
                     if res.status_code == 200:
-                        st.toast("구글 시트에 완료 상태가 동기화되었습니다!")
+                        st.toast("구글 시트에 완료 상태가 성공적으로 동기화되었습니다! ✔")
                         st.session_state.current_missions = load_data()
                         st.rerun()
                     else:
