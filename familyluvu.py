@@ -39,12 +39,12 @@ theme_colors = {
 tag_styles = {"Urgent 🚨": "#D63031", "Priority 📌": "#E67E22", "Normal 📅": "#7F8C8D"}
 
 # -------------------------------------------------------------
-# 🔗 [양방향 클라우드 주소 연동]
+# 🔗 [양방향 클라우드 주소 연동 - 업데이트 완료 🎯]
 # -------------------------------------------------------------
 sheet_url = "https://docs.google.com/spreadsheets/d/1vSXiuoYiQM4dxlKGkXbNJRKKWW0ADAJ3ESsxtA-4Hpg/gviz/tq?tqx=out:csv"
 
-# ⭐ 만약 1단계 배포 후 주소가 바뀌었다면 아래 코드를 새 주소로 변경해 주세요!
-script_url = "https://script.google.com/macros/s/AKfycbxs9THg2TXUppuibUNXLaUV-gPQF0__qlwObXDO0qlN7ebGBvYV9RHH5omnF3zVfTMK/exec"
+# 보내주신 최신 구글 앱스 스크립트 주소로 교체했습니다!
+script_url = "https://script.google.com/macros/s/AKfycbxgOhqUO0iI7V-1nJWLdM6A6V95ikhF2KW9_jQvWISQQooplu80izy7ZVgHovOrj_E0/exec"
 
 def load_data():
     """구글 시트에서 데이터를 실시간으로 읽어오는 함수"""
@@ -53,8 +53,9 @@ def load_data():
         df = pd.read_csv(nocache_url)
         df = df.fillna("") 
         
-        # 구글 시트의 status 열이 '완료'인 행은 대시보드 조회에서 완벽 제외
+        # 'status' 열의 양쪽 공백을 제거하고, '완료'인 항목은 대시보드에서 보이지 않게 필터링
         if "status" in df.columns:
+            df["status"] = df["status"].astype(str).str.strip()
             df = df[df["status"] != "완료"]
             
         return df.to_dict(orient="records")
@@ -66,7 +67,7 @@ if "current_missions" not in st.session_state:
     st.session_state.current_missions = load_data()
 
 st.title("👨‍👩‍👧‍👦 FamilySync - 워킹맘을 위한 스마트 가족 대시보드")
-st.caption("🌐 클라우드 동기화 완료 | 완료 처리 시 구글 시트 원본의 status가 '완료'로 즉시 업데이트됩니다.")
+st.caption("🌐 클라우드 완벽 연동 | 완료 처리 시 구글 시트 원본의 status 데이터가 '완료'로 즉시 업데이트됩니다.")
 
 col1, col2 = st.columns([1, 1.2])
 
@@ -127,7 +128,6 @@ with col2:
             current_tag = item.get("tag", "Normal 📅")
             if not current_tag or current_tag == "nan": current_tag = "Normal 📅"
                 
-            tag_color = tag_styles.get(current_tag, "#7F8C8D")
             border_color = "#E84118" if current_tag == "Urgent 🚨" else theme['fg']
             
             task_display = item.get('task', '내용 없음')
@@ -135,7 +135,7 @@ with col2:
             
             card_html = f"""
             <div class="family-card" style="background-color: {theme['bg']}; border-left: 6px solid {border_color};">
-                <span class="badge" style="background-color: {tag_color};">{current_tag}</span>
+                <span class="badge" style="background-color: {tag_styles.get(current_tag, '#7F8C8D')};">{current_tag}</span>
                 <h4 style="color: #2C3E50; margin: 0;">{theme['emoji']} [{current_worker}] 대상: {item.get('child', '공통')}</h4>
                 <p style="color: #485460; margin: 8px 0 2px 0; font-size: 1.1rem; font-weight: bold;">{task_display}</p>
                 <div class="due-date">📅 마감기한: <b>{due_display}</b></div>
@@ -143,21 +143,21 @@ with col2:
             """
             st.markdown(card_html, unsafe_allow_html=True)
             
-            # [동기화 연동 수정 완료 🎯] 완료 누르면 구글 시트의 6번째(F열) status를 '완료'로 변경 요청
+            # 완료 버튼을 누르면 신규 구글 앱스 스크립트 주소로 'action: complete' 신호를 보냅니다.
             if st.button(f"✔ {idx+1}번 미션 완료 처리", key=f"comp_{idx}"):
                 complete_payload = {
                     "action": "complete",
-                    "worker": current_worker,
-                    "child": item.get('child', '공통'),
-                    "task": task_display
+                    "worker": str(current_worker),
+                    "child": str(item.get('child', '공통')),
+                    "task": str(task_display)
                 }
                 try:
                     res = requests.post(script_url, json=complete_payload)
                     if res.status_code == 200:
-                        st.toast("구글 시트에 완료 상태가 성공적으로 동기화되었습니다! ✔")
+                        st.toast("구글 시트와 완료 상태가 성공적으로 동기화되었습니다! ✔")
                         st.session_state.current_missions = load_data()
                         st.rerun()
                     else:
-                        st.error("구글 시트 상태 업데이트 실패")
+                        st.error("구글 시트 업데이트에 실패했습니다.")
                 except Exception as e:
-                    st.error(f"완료 처리 중 통신 오류: {e}")
+                    st.error(f"통신 오류 발생: {e}")
